@@ -564,3 +564,39 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+int
+tickets_owned(int pid)
+{
+  if(pid < 0)
+  {
+    return -1;
+  }
+
+  struct proc* p;
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if(p->pid == pid)
+    {
+      release(&ptable.lock);
+      return p->ticketCount;
+    }
+  }
+  release(&ptable.lock);
+  return -1;
+}
+
+int
+transfer_tickets(int pid, int tickets)
+{
+  if(pid < 0)
+    return -1;
+  
+  struct proc* p;
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    
+  }
+}

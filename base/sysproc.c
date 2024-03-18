@@ -150,3 +150,25 @@ sys_set_sched(void)
 
   return 0;
 }
+
+int
+sys_tickets_owned(void)
+{
+  int p;
+  if(argint(0, &p) < 0)
+    return -1;
+
+  return tickets_owned(p);
+}
+
+int
+sys_transfer_tickets(void)
+{
+  int p, t;
+  if(argint(0, &p) < 0)
+    return -1;
+  if(argint(0, &t) < 0)
+    return -1;
+
+  return transfer_tickets(p, t);
+}
