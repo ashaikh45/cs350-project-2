@@ -22,6 +22,9 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+int isChildFirst;
+int isStrideSched;
+
 void
 pinit(void)
 {
@@ -217,6 +220,12 @@ fork(void)
   acquire(&ptable.lock);
   np->state = RUNNABLE;
   release(&ptable.lock);
+
+  if(isChildFirst == 1)
+  {
+    curproc->state = RUNNING;
+    yield();
+  }
 
   return pid;
 }

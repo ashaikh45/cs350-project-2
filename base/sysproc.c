@@ -112,3 +112,41 @@ int sys_enable_sched_trace(void)
 
   return 0;
 }
+
+int
+sys_fork_winner(void)
+{
+  int w;
+  if(argint(0, &w) < 0)
+    return -1;
+
+  if(w == 1)
+  {
+    isChildFirst = 1;
+  }
+  else
+  {
+    isChildFirst = 0;
+  }
+
+  return 0;
+}
+
+int
+sys_set_sched(void)
+{
+  int s;
+  if(argint(0, &s) < 0)
+    return -1;
+
+  if(s == 1)
+  {
+    isStrideSched = 1;
+  }
+  else
+  {
+    isStrideSched = 0;
+  }
+
+  return 0;
+}
