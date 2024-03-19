@@ -590,13 +590,32 @@ tickets_owned(int pid)
 int
 transfer_tickets(int pid, int tickets)
 {
-  if(pid < 0)
+  if(pid < 0 || tickets < 0)
     return -1;
   
   struct proc* p;
+  struct proc* curproc = myproc();
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
   {
-    
+    if(p->pid == pid)
+    {
+      //cprintf("%d %d\n", curproc->ticketCount, tickets);
+      if(curproc->ticketCount >= tickets)
+      {
+        curproc->ticketCount -= tickets;
+        p->ticketCount += tickets;
+        release(&ptable.lock);
+        return curproc->ticketCount;
+      }
+      else
+      {
+        release(&ptable.lock);
+        return -2;
+      }
+    }
   }
+
+  release(&ptable.lock);
+  return -3;
 }
