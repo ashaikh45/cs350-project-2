@@ -116,6 +116,33 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+  
+  if(isStrideSched == 1)
+  {
+    struct proc* np;
+    int numProc = 0;
+    acquire(&ptable.lock);
+    for(np = ptable.proc; np < &ptable.proc[NPROC]; np++)
+    {
+      if(np->state == RUNNABLE|| np->state == RUNNING || np == p)
+      {
+        numProc++;
+      }
+    }
+
+    int procTickets = 100/numProc;
+    int pass = 0;
+
+    for(np = ptable.proc; np < &ptable.proc[NPROC]; np++)
+    {
+      if(np->state == RUNNABLE|| np->state == RUNNING || np == p)
+      {
+        np->ticketCount = procTickets;
+        np->pass = pass;
+      }
+    }
+    release(&ptable.lock);
+  }
 
   return p;
 }
@@ -223,7 +250,6 @@ fork(void)
 
   if(isChildFirst == 1)
   {
-    curproc->state = RUNNING;
     yield();
   }
 
@@ -272,6 +298,32 @@ exit(void)
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
+
+  if(isStrideSched == 1)
+  {
+    struct proc* np;
+    int numProc = 0;
+    for(np = ptable.proc; np < &ptable.proc[NPROC]; np++)
+    {
+      if(np->state == RUNNABLE|| np->state == RUNNING)
+      {
+        numProc++;
+      }
+    }
+
+    int procTickets = 100/numProc;
+    int pass = 0;
+
+    for(np = ptable.proc; np < &ptable.proc[NPROC]; np++)
+    {
+      if(np->state == RUNNABLE|| np->state == RUNNING)
+      {
+        np->ticketCount = procTickets;
+        np->pass = pass;
+      }
+    }
+  }
+
   sched();
   panic("zombie exit");
 }
@@ -332,6 +384,7 @@ void
 scheduler(void)
 {
   struct proc *p;
+  struct proc *min;
   struct cpu *c = mycpu();
   c->proc = 0;
   
@@ -341,28 +394,66 @@ scheduler(void)
     // Enable interrupts on this processor.
     sti();
 
-        // Loop over process table looking for process to run.
-        acquire(&ptable.lock);
-        ran = 0;
-        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-          if(p->state != RUNNABLE)
-            continue;
+      // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    ran = 0;
+    if(isStrideSched == 1)
+    {
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state != RUNNABLE)
+        {
+          continue;
+        }
+        min = p;
+        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+        {
+          if(p->pass < min->pass && p->state == RUNNABLE)
+          {
+            min = p;
+          }
+        }
+        min->pass += (100*10)/min->ticketCount;
+        
+        ran = 1;
 
-          ran = 1;
-      
-          // Switch to chosen process.  It is the process's job
-          // to release ptable.lock and then reacquire it
-          // before jumping back to us.
-          c->proc = p;
-          switchuvm(p);
-          p->state = RUNNING;
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire it
+        // before jumping back to us.
+        c->proc = min;
+        switchuvm(min);
+        min->state = RUNNING;
 
-          swtch(&(c->scheduler), p->context);
-          switchkvm();
+        swtch(&(c->scheduler), min->context);
+        switchkvm();
 
-          // Process is done running for now.
-          // It should have changed its p->state before coming back.
-          c->proc = 0;
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+    }
+    else
+    {
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state != RUNNABLE)
+        {
+          continue;
+        }
+        ran = 1;
+
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire it
+        // before jumping back to us.
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
     }
     release(&ptable.lock);
 
@@ -587,35 +678,30 @@ tickets_owned(int pid)
   return -1;
 }
 
-int
-transfer_tickets(int pid, int tickets)
-{
-  if(pid < 0 || tickets < 0)
+int transfer_tickets (int pid, int tickets)
+{  
+  if(tickets < 0)
     return -1;
   
-  struct proc* p;
-  struct proc* curproc = myproc();
+  struct proc *p;
+  struct proc *curproc = myproc();
+  
+  if (curproc->ticketCount <= tickets)
+    return -2;
+
   acquire(&ptable.lock);
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  for(p = ptable.proc; p< &ptable.proc[NPROC]; p++)
   {
     if(p->pid == pid)
     {
-      //cprintf("%d %d\n", curproc->ticketCount, tickets);
-      if(curproc->ticketCount >= tickets)
-      {
-        curproc->ticketCount -= tickets;
-        p->ticketCount += tickets;
+        curproc->ticketCount -=tickets;
+        p->ticketCount +=tickets;
         release(&ptable.lock);
         return curproc->ticketCount;
-      }
-      else
-      {
-        release(&ptable.lock);
-        return -2;
-      }
     }
   }
 
   release(&ptable.lock);
   return -3;
+  //return curproc->ticketCount;
 }
